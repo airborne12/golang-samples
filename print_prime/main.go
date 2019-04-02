@@ -15,6 +15,14 @@ func main() {
 	<-wait
 }
 
+//Processor 逻辑
+/*
+	输入： 2，3，4，5，6，7，8，9，10到channel origin
+	goroutine 1 素数：2 过滤后输出到channel out：3，5，7，9
+	goroutine 2 素数：3 过滤后输出到channel out: 5, 7
+	goroutine 3 素数：5 过滤后输出到channel out：7
+	goroutine 4 素数：7 过滤后关闭channel out
+*/
 func Processor(seq chan int, wait chan struct{}) {
 	go func() {
 		prime, ok := <-seq
