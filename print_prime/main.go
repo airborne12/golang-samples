@@ -8,11 +8,12 @@ import (
 func main() {
 	origin, wait := make(chan int), make(chan struct{})
 	Processor(origin, wait)
-	for num := 2; num < 10; num++ {
+	for num := 2; num < 1000000; num++ {
 		origin <- num
 	}
 	close(origin)
 	<-wait
+	//time.Sleep(10 * time.Second)
 }
 
 //Processor 逻辑
