@@ -23,6 +23,7 @@ func init() {
 	logging.SetBackend(backendLeveled)
 }
 
+//Get returns a Logger object based on the module name
 func Get() *logging.Logger {
 	return gLog
 }
