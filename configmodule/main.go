@@ -5,7 +5,7 @@ import (
 	"github.com/airborne12/golang-samples/configmodule/config"
 )
 
-func main(){
+func main() {
 	config := config.Get()
-	fmt.Println(config)
+	fmt.Println(config.ListenAddr)
 }
