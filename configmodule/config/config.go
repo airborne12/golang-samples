@@ -53,7 +53,7 @@ func (c *Config) parse() {
 	if err != nil {              // Handle errors reading the config file
 		logger.Errorf("Loading config file error:%s", err)
 	}
-
+	//if command line args and yaml config file duplicate defined, command first
 	c.ListenAddr = viper.GetString("listenAddr")
 	return
 }
