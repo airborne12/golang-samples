@@ -13,7 +13,12 @@ var logger = log.Get()
 
 //Config struct contains config items for whole project
 type Config struct {
-	ListenAddr string
+	ListenAddr       string
+	ServerCert       string
+	ServerKey        string
+	AllowedCN        string
+	CredStoreAddress string
+	CredStoreCA      string
 }
 
 var gConfig *Config
@@ -36,14 +41,26 @@ func (c *Config) parse() {
 	//command line args
 	flag.String("listenAddr", "localhost:2503", "Address to listen")
 	flag.String("configFile", "/etc/example/example.yaml", "Config file to load")
+	flag.String("server-cert", "", "server TLS cert")
+	flag.String("server-key", "", "server TLS key")
+	flag.String("client-ca", "", "client CA")
+	flag.String("allowed-cn", "", "allowed CommonName for client authentication")
+	flag.String("credstore-address", "", "credstore grpc address")
+	flag.String("credstore-ca", "", "credstore server ca")
 
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 	viper.BindPFlags(pflag.CommandLine)
+
 	viper.SetDefault("listenAddr", "localhost:2503")
+	viper.SetDefault("serverCert", "")
+	viper.SetDefault("serverKey", "")
+	viper.SetDefault("clientCA", "")
+	viper.SetDefault("allowedCN", "")
+	viper.SetDefault("credStoreAddress", "")
+	viper.SetDefault("credStoreCA", "")
 
 	viper.SetConfigType("yaml")
-
 	name := filepath.Base(viper.GetString("configFile"))
 	path := filepath.Dir(viper.GetString("configFile"))
 	viper.SetConfigName(name)    // name of config file (without extension)
