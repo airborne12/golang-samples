@@ -1,0 +1,11 @@
+configmodule/configmodule
+grpc_service/cmd/server/server
+grpc_service/conf/ca.key
+grpc_service/conf/ca.crt
+grpc_service/conf/server.key
+grpc_service/conf/server.crt
+grpc_service/pki/ca.crt
+grpc_service/pki/ca.key
+grpc_service/pki/server.crt
+grpc_service/pki/server.csr
+grpc_service/pki/server.key

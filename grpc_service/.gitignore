@@ -1,0 +1,9 @@
+conf/ca.key
+conf/ca.crt
+conf/server.key
+conf/server.crt
+pki/ca.crt
+pki/ca.key
+pki/server.crt
+pki/server.csr
+pki/server.key
