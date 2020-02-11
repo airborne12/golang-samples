@@ -17,6 +17,7 @@ func NewGRPCConn(
 	serverCAFileName string,
 	clientCertFileName string,
 	clientKeyFileName string,
+	sn string,
 ) (*grpc.ClientConn, error) {
 	if serverCAFileName == "" {
 		return grpc.Dial(address,
@@ -32,7 +33,8 @@ func NewGRPCConn(
 	caCertPool.AppendCertsFromPEM(caCert)
 
 	cfg := &tls.Config{
-		RootCAs: caCertPool,
+		RootCAs:    caCertPool,
+		ServerName: sn,
 	}
 
 	if clientCertFileName != "" && clientKeyFileName != "" {

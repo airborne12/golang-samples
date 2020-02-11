@@ -1,1 +1,4 @@
-listenAddr: localhost:2503
+listenAddr: localhost:8403
+serverCert: conf/server.crt
+serverKey: conf/server.key
+clientCA: conf/ca.crt

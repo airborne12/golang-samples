@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"strings"
@@ -14,28 +13,80 @@ import (
 	"github.com/google/credstore/client"
 	"github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/grpc-ecosystem/grpc-gateway/runtime"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	//	"github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	opentracing "github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
+
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/reflection"
 
-	"github.com/airborne12/golang-samples/configmodule/config"
-	"github.com/airborne12/golang-samples/logmodule/log"
+	"github.com/airborne12/golang-samples/grpc_service/config"
+	"github.com/airborne12/golang-samples/grpc_service/metrics"
+	"github.com/airborne12/golang-samples/grpc_service/pki"
+	"github.com/airborne12/golang-samples/grpc_service/service"
+
+	//	pb "github.com/airborne12/golang-samples/grpc_service/echo-proto"
+	"github.com/airborne12/golang-samples/grpc_service/log"
 )
 
 var (
-	glog    = log.Get()
-	gconfig = config.Get()
+	glog         = log.Get()
+	gconfig      = config.Get()
+	gservicePool = service.Get()
+	gcertKey     = pki.Get()
 	// ListenAddress is the grpc listen address
-	ListenAddress = gconfig.ListenAddr
-
-	serverCert       = gconfig.ServerCert
-	serverKey        = gconfig.ServerKey
-	clientCA         = gconfig.ClientCA
-	allowedCN        = gconfig.AllowedCN
-	credStoreAddress = gconfig.CredStoreAddress
-	credStoreCA      = gconfig.CredStoreCA
+	ListenAddress    = &gconfig.ListenAddr
+	serverCert       = &gconfig.ServerCert
+	serverKey        = &gconfig.ServerKey
+	clientCA         = &gconfig.ClientCA
+	allowedCN        = &gconfig.AllowedCN
+	credStoreAddress = &gconfig.CredStoreAddress
+	credStoreCA      = &gconfig.CredStoreCA
+	sn               = &gconfig.SN
 )
+
+//NewRestMux create rest api handler
+func NewRestMux(grpcServer *grpc.Server) (*http.ServeMux, error) {
+
+	// get context, this allows control of the connection
+	ctx := context.Background()
+
+	var dopts []grpc.DialOption
+	if !gconfig.Insecure {
+		// These credentials are for the upstream connection to the GRPC server
+		dcreds := credentials.NewTLS(&tls.Config{
+			ServerName:   *sn,
+			RootCAs:      gcertKey.CertPool,
+			Certificates: []tls.Certificate{*gcertKey.KeyPair},
+		})
+		dopts = []grpc.DialOption{grpc.WithTransportCredentials(dcreds)}
+	} else {
+		dopts = []grpc.DialOption{grpc.WithInsecure()}
+	}
+	// Which multiplexer to register on.
+	gwmux := runtime.NewServeMux(runtime.WithMarshalerOption(runtime.MIMEWildcard,
+		&runtime.JSONPb{OrigName: true, EmitDefaults: true}))
+
+	for _, s := range gservicePool.Services {
+		err := s.RegisterServiceHandlerFromEndpoint(ctx, gwmux, *ListenAddress, dopts)
+		if err != nil {
+			return nil, err
+		}
+	}
+	mux := http.NewServeMux()
+
+	// we can add any non-grpc endpoints here.
+	//mux.HandleFunc("/foobar/", simpleHTTPHello)
+
+	// register the gateway mux onto the root path.
+	mux.Handle("/", gwmux)
+
+	return mux, nil
+}
 
 func grpcHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,29 +100,26 @@ func grpcHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Ha
 	})
 }
 
+func PromHTTPServe(grpcServer *grpc.Server) {
+	metrics.GRPCMetrics.InitializeMetrics(grpcServer)
+
+	httpServer := &http.Server{Handler: promhttp.HandlerFor(metrics.Reg, promhttp.HandlerOpts{}), Addr: fmt.Sprintf("0.0.0.0:%d", 9092)}
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil {
+			glog.Fatal("Unable to start a http server.")
+		}
+	}()
+}
+
 // ListenAndServe starts grpc server
 func ListenAndServe(grpcServer *grpc.Server, otherHandler http.Handler) error {
+
 	lis, err := net.Listen("tcp", *ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
-
-	if *serverCert != "" {
-		serverCertKeypair, err := tls.LoadX509KeyPair(*serverCert, *serverKey)
-		if err != nil {
-			return fmt.Errorf("failed to load server tls cert/key: %v", err)
-		}
-
-		var clientCertPool *x509.CertPool
-		if *clientCA != "" {
-			caCert, err := ioutil.ReadFile(*clientCA)
-			if err != nil {
-				return fmt.Errorf("failed to load client ca: %v", err)
-			}
-			clientCertPool = x509.NewCertPool()
-			clientCertPool.AppendCertsFromPEM(caCert)
-		}
-
+	glog.Debugf("config:%v", gconfig)
+	if !gconfig.Insecure {
 		var h http.Handler
 		if otherHandler == nil {
 			h = grpcServer
@@ -80,11 +128,11 @@ func ListenAndServe(grpcServer *grpc.Server, otherHandler http.Handler) error {
 		}
 
 		tlsConfig := &tls.Config{
-			Certificates: []tls.Certificate{serverCertKeypair},
+			Certificates: []tls.Certificate{*gcertKey.KeyPair},
 			NextProtos:   []string{"h2"},
 		}
 
-		if *allowedCN != "" {
+		if gconfig.AllowedCN != "" {
 			tlsConfig.VerifyPeerCertificate = func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
 				for _, chains := range verifiedChains {
 					if len(chains) != 0 {
@@ -96,24 +144,23 @@ func ListenAndServe(grpcServer *grpc.Server, otherHandler http.Handler) error {
 				return errors.New("CommonName authentication failed")
 			}
 		}
+		if gcertKey.CertPool != nil {
+			tlsConfig.ClientCAs = gcertKey.CertPool
+			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
+		} else {
+			glog.Warning("no client ca provided for grpc server")
+		}
 
 		httpsServer := &http.Server{
 			Handler:   h,
 			TLSConfig: tlsConfig,
 		}
 
-		if clientCertPool != nil {
-			httpsServer.TLSConfig.ClientCAs = clientCertPool
-			httpsServer.TLSConfig.ClientAuth = tls.RequireAndVerifyClientCert
-		} else {
-			glog.Warningf("no client ca provided for grpc server")
-		}
-
 		glog.Infof("serving on %v", *ListenAddress)
 		err = httpsServer.Serve(tls.NewListener(lis, httpsServer.TLSConfig))
 		return fmt.Errorf("failed to serve: %v", err)
 	}
-
+	//do not support rest here
 	glog.Warningf("serving INSECURE on %v", *ListenAddress)
 	err = grpcServer.Serve(lis)
 	return fmt.Errorf("failed to serve: %v", err)
@@ -141,10 +188,14 @@ func NewServer() (*grpc.Server, *client.CredstoreClient, error) {
 			)))
 	} else {
 		grpcServer = grpc.NewServer(
-			grpc.UnaryInterceptor(
-				otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer())))
+			grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
+				metrics.GRPCMetrics.UnaryServerInterceptor(),
+				otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer()),
+			)))
 	}
-
+	for _, s := range gservicePool.Services {
+		s.Register2PB(grpcServer)
+	}
 	reflection.Register(grpcServer)
 	grpc_prometheus.Register(grpcServer)
 
