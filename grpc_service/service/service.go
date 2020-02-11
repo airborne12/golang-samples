@@ -2,9 +2,8 @@ package service
 
 import (
 	"context"
-	"google.golang.org/grpc"
 	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-
+	"google.golang.org/grpc"
 )
 
 var gPool *Pool
