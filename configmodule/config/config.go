@@ -16,6 +16,7 @@ type Config struct {
 	ListenAddr       string
 	ServerCert       string
 	ServerKey        string
+	ClientCA         string
 	AllowedCN        string
 	CredStoreAddress string
 	CredStoreCA      string

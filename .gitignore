@@ -1,5 +1,6 @@
 configmodule/configmodule
 grpc_service/cmd/server/server
+grpc_service/cmd/client/client
 grpc_service/conf/ca.key
 grpc_service/conf/ca.crt
 grpc_service/conf/server.key
