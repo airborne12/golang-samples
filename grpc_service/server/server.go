@@ -100,6 +100,7 @@ func grpcHandlerFunc(grpcServer *grpc.Server, otherHandler http.Handler) http.Ha
 	})
 }
 
+//PromHTTPServe start a prometheus server providing metrics
 func PromHTTPServe(grpcServer *grpc.Server) {
 	metrics.GRPCMetrics.InitializeMetrics(grpcServer)
 
@@ -119,14 +120,14 @@ func ListenAndServe(grpcServer *grpc.Server, otherHandler http.Handler) error {
 		return fmt.Errorf("failed to listen: %v", err)
 	}
 	glog.Debugf("config:%v", gconfig)
-	if !gconfig.Insecure {
-		var h http.Handler
-		if otherHandler == nil {
-			h = grpcServer
-		} else {
-			h = grpcHandlerFunc(grpcServer, otherHandler)
-		}
+	var h http.Handler
+	if otherHandler == nil {
+		h = grpcServer
+	} else {
+		h = grpcHandlerFunc(grpcServer, otherHandler)
+	}
 
+	if !gconfig.Insecure {
 		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{*gcertKey.KeyPair},
 			NextProtos:   []string{"h2"},
@@ -160,9 +161,13 @@ func ListenAndServe(grpcServer *grpc.Server, otherHandler http.Handler) error {
 		err = httpsServer.Serve(tls.NewListener(lis, httpsServer.TLSConfig))
 		return fmt.Errorf("failed to serve: %v", err)
 	}
-	//do not support rest here
+	//non tls support
 	glog.Warningf("serving INSECURE on %v", *ListenAddress)
-	err = grpcServer.Serve(lis)
+	httpServer := &http.Server{
+		Handler: h,
+	}
+	//err = grpcServer.Serve(lis)
+	err = httpServer.Serve(lis)
 	return fmt.Errorf("failed to serve: %v", err)
 }
 
