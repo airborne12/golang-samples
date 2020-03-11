@@ -27,6 +27,9 @@ type CertKey struct {
 
 // NewCertKey creates a certicicate pair and pool and package them into CertKey struct
 func NewCertKey() *CertKey {
+	if gconfig.Insecure {
+		return nil
+	}
 	serverCrt, err := ioutil.ReadFile(gconfig.ServerCert)
 	if err != nil {
 		glog.Fatal(err)
